@@ -1,0 +1,11 @@
+# Development requirements for sekha-cli
+# Install in order: sdk → bridge → cli
+
+# Install sekha-python-sdk from local path
+-e ../sekha-python-sdk
+
+# Install sekha-bridge from local path (if needed)
+-e ../sekha-bridge
+
+# Install sekha-cli with dev dependencies
+-e .[dev]

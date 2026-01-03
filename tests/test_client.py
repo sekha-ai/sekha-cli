@@ -1,16 +1,9 @@
 """Test Sekha client functionality."""
+import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import Mock, patch
 from sekha_cli.client import SekhaClient
-
-
-@pytest.fixture
-def client():
-    """Create test client."""
-    return SekhaClient(
-        base_url='http://localhost:8080',
-        api_key='test-key-123'
-    )
 
 
 class TestClientInitialization:
@@ -18,119 +11,164 @@ class TestClientInitialization:
 
     def test_init_with_params(self):
         """Test initialization with parameters."""
-        client = SekhaClient(
-            base_url='http://example.com',
-            api_key='key-123'
+        client = SekhaClient(base_url="http://example.com", api_key="sk-test-valid-key-1234567890")
+        assert client.base_url == "http://example.com"
+        assert client.api_key == "sk-test-valid-key-1234567890"
+        assert client.headers["Authorization"] == "Bearer sk-test-valid-key-1234567890"
+
+    def test_init_strips_trailing_slash(self):
+        """Test that trailing slash is stripped from URL."""
+        client = SekhaClient(base_url="http://localhost:8080/", api_key="sk-test-valid-key-1234567890")
+        assert client.base_url == "http://localhost:8080"
+
+
+class TestQueryOperations:
+    """Test query/search operations."""
+
+    @patch("sekha_cli.client.MemoryController")
+    def test_query_success(self, mock_controller_class):
+        """Test successful query."""
+        mock_controller = MagicMock()
+        mock_controller_class.return_value = mock_controller
+        mock_controller.search.return_value = [
+            {"id": "conv-1", "label": "Test", "preview": "Test preview"}
+        ]
+
+        client = SekhaClient(base_url="http://test.com", api_key="sk-test-valid-key-1234567890")
+        results = client.query("test query", label="Work", limit=5)
+
+        assert len(results) == 1
+        assert results[0]["id"] == "conv-1"
+        mock_controller.search.assert_called_once_with(
+            "test query", label="Work", limit=5
         )
-        assert client.base_url == 'http://example.com'
-        assert client.api_key == 'key-123'
 
-    def test_init_default_url(self):
-        """Test initialization with default URL."""
-        client = SekhaClient(api_key='key-123')
-        assert 'localhost' in client.base_url or client.base_url
+    @patch("sekha_cli.client.MemoryController")
+    def test_query_with_error(self, mock_controller_class):
+        """Test query with error."""
+        mock_controller = MagicMock()
+        mock_controller_class.return_value = mock_controller
+        mock_controller.search.side_effect = Exception("Search failed")
+
+        client = SekhaClient(base_url="http://test.com", api_key="sk-test-valid-key-1234567890")
+
+        with pytest.raises(RuntimeError, match="Query failed"):
+            client.query("test")
 
 
-class TestConversationOperations:
-    """Test conversation operations."""
+class TestStoreOperations:
+    """Test store operations."""
 
-    @patch('requests.post')
-    def test_create_conversation(self, mock_post, client):
-        """Test creating a conversation."""
-        mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {'id': 'conv-123', 'label': 'Test'}
+    @patch("builtins.open", create=True)
+    @patch("sekha_cli.client.MemoryController")
+    def test_store_success(self, mock_controller_class, mock_open):
+        """Test successful store from file."""
+        mock_controller = MagicMock()
+        mock_controller_class.return_value = mock_controller
+        mock_controller.create.return_value = {"id": "conv-123"}
+
+        mock_file = MagicMock()
+        mock_file.__enter__.return_value.read.return_value = json.dumps(
+            {"messages": [{"role": "user", "content": "Hello"}]}
         )
+        mock_open.return_value = mock_file
 
-        result = client.conversations.create(
-            label='Test Conversation',
-            messages=[{'role': 'user', 'content': 'Hello'}]
-        )
+        client = SekhaClient(base_url="http://test.com", api_key="sk-test-valid-key-1234567890")
+        result = client.store_conversation("/path/to/file.json", "Imported")
 
-        assert result['id'] == 'conv-123'
-        mock_post.assert_called_once()
+        assert result["id"] == "conv-123"
+        assert result["label"] == "Imported"
 
-    @patch('requests.get')
-    def test_list_conversations(self, mock_get, client):
-        """Test listing conversations."""
-        mock_get.return_value = Mock(
-            status_code=200,
-            json=lambda: {
-                'conversations': [
-                    {'id': 'conv-1', 'label': 'Conv 1'},
-                    {'id': 'conv-2', 'label': 'Conv 2'}
-                ]
+    def test_store_invalid_file(self):
+        """Test store with invalid file."""
+        client = SekhaClient(base_url="http://test.com", api_key="sk-test-valid-key-1234567890")
+
+        with pytest.raises(ValueError, match="No messages found"):
+            # This would fail because file doesn't exist,
+            # but we test the error path
+            with patch("builtins.open", create=True) as mock_open:
+                mock_file = MagicMock()
+                mock_file.__enter__.return_value.read.return_value = json.dumps({})
+                mock_open.return_value = mock_file
+
+                client.store_conversation("/path/to/file.json", "Test")
+
+
+class TestLabelOperations:
+    """Test label operations."""
+
+    @patch("sekha_cli.client.MemoryController")
+    def test_list_labels(self, mock_controller_class):
+        """Test listing labels."""
+        mock_controller = MagicMock()
+        mock_controller_class.return_value = mock_controller
+        mock_controller.search.return_value = [
+            {"id": "1", "label": "Work"},
+            {"id": "2", "label": "Personal"},
+            {"id": "3", "label": "Work"},
+        ]
+
+        client = SekhaClient(base_url="http://test.com", api_key="sk-test-valid-key-1234567890")
+        labels = client.list_labels()
+
+        assert len(labels) == 2  # Two unique labels
+        work_label = next(label for label in labels if label["name"] == "Work")
+        assert work_label["count"] == 2
+
+
+class TestExportOperations:
+    """Test export operations."""
+
+    @patch("sekha_cli.client.MemoryController")
+    def test_export_markdown(self, mock_controller_class):
+        """Test markdown export."""
+        mock_controller = MagicMock()
+        mock_controller_class.return_value = mock_controller
+        
+        # Mock search() not list()
+        mock_controller.search.return_value = [
+            {
+                "id": "conv-1",
+                "label": "Project:AI",
+                "created_at": "2024-01-01",
+                "messages": [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi there"},
+                ],
             }
-        )
+        ]
+        
+        client = SekhaClient(base_url="http://test.com", api_key="sk-test-valid-key-1234567890")
+        content = client.export("Project:AI", format="markdown")
+        
+        assert "# Project:AI" in content
+        assert "**User:** Hello" in content
+        assert "**Assistant:** Hi there" in content
 
-        result = client.conversations.list(limit=10)
+        @patch("sekha_cli.client.MemoryController")
+        def test_export_invalid_format(self, mock_controller_class):
+            """Test export with invalid format."""
+            mock_controller = MagicMock()
+            mock_controller_class.return_value = mock_controller
+            mock_controller.search.return_value = []
+            
+            client = SekhaClient(base_url="http://test.com ", api_key="sk-test-valid-key-1234567890")
 
-        assert len(result) == 2
-        assert result[0]['id'] == 'conv-1'
-        mock_get.assert_called_once()
-
-    @patch('requests.get')
-    def test_get_conversation(self, mock_get, client):
-        """Test getting a specific conversation."""
-        mock_get.return_value = Mock(
-            status_code=200,
-            json=lambda: {'id': 'conv-123', 'label': 'Test'}
-        )
-
-        result = client.conversations.get('conv-123')
-
-        assert result['id'] == 'conv-123'
-        mock_get.assert_called_once()
-
-
-class TestSearchOperations:
-    """Test search operations."""
-
-    @patch('requests.post')
-    def test_query(self, mock_post, client):
-        """Test semantic search query."""
-        mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {
-                'results': [
-                    {'conversation_id': 'conv-1', 'content': 'Result 1'}
-                ]
-            }
-        )
-
-        result = client.query('test search', limit=5)
-
-        assert 'results' in result
-        assert len(result['results']) == 1
-        mock_post.assert_called_once()
+            with pytest.raises(ValueError, match="Unsupported format"):
+                client.export("test", format="invalid")
 
 
 class TestErrorHandling:
     """Test error handling."""
 
-    @patch('requests.get')
-    def test_404_error(self, mock_get, client):
-        """Test handling 404 errors."""
-        mock_get.return_value = Mock(status_code=404)
+    @patch("sekha_cli.client.MemoryController")
+    def test_get_conversation_error(self, mock_controller_class):
+        """Test error handling in get_conversation."""
+        mock_controller = MagicMock()
+        mock_controller_class.return_value = mock_controller
+        mock_controller.get.side_effect = RuntimeError("Not found")
 
-        with pytest.raises(Exception):
-            client.conversations.get('nonexistent')
+        client = SekhaClient(base_url="http://test.com", api_key="sk-test-valid-key-1234567890")
 
-    @patch('requests.post')
-    def test_connection_error(self, mock_post, client):
-        """Test handling connection errors."""
-        mock_post.side_effect = ConnectionError('Connection failed')
-
-        with pytest.raises(ConnectionError):
-            client.conversations.create(
-                label='Test',
-                messages=[{'role': 'user', 'content': 'Hi'}]
-            )
-
-    @patch('requests.get')
-    def test_auth_error(self, mock_get, client):
-        """Test handling authentication errors."""
-        mock_get.return_value = Mock(status_code=401)
-
-        with pytest.raises(Exception):
-            client.conversations.list()
+        with pytest.raises(RuntimeError):
+            client.get_conversation("nonexistent")

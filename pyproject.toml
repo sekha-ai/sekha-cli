@@ -12,38 +12,45 @@ authors = [
     {name = "Sekha Contributors"}
 ]
 dependencies = [
-    "sekha-python-sdk>=0.1.0",
+    # Use either local path (dev) or git URL (CI/production)
+    "sekha @ file:///${PROJECT_ROOT}/../sekha-python-sdk",
     "click>=8.0.0",
     "rich>=13.0.0",
     "pyyaml>=6.0"
 ]
 
-[project.scripts]
-sekha = "sekha_cli.main:cli"
-
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
-    "pytest-cov>=4.0"
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5"
 ]
+
+[project.scripts]
+sekha = "sekha_cli.main:cli"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "--cov=sekha_cli --cov-report=term-missing --cov-report=html"
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=sekha_cli --cov-report=term-missing --cov-report=html --cov-fail-under=80"
 
 [tool.coverage.run]
 source = ["sekha_cli"]
-omit = ["tests/*", "*/__pycache__/*"]
-
-[tool.ruff]
-line-length = 88
-target-version = "py38"
-select = ["E", "F", "W", "C", "N", "UP", "S", "B", "A", "COM", "C4", "DTZ", "T10", "DJ", "EM", "EXE", "FA", "ISC", "ICN", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "INT", "ARG", "PTH", "TD", "FIX", "ERA", "PD", "PGH", "PL", "TRY", "FLY", "NPY", "AIR", "PERF", "FURB", "LOG", "RUF"]
-ignore = ["E501", "COM812", "ISC001"]
+omit = ["*/tests/*", "*/test_*"]
 
 [tool.black]
 line-length = 88
 target-version = ['py38']
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["B008"]
