@@ -10,10 +10,13 @@ dist/
 downloads/
 eggs/
 .eggs/
+*.egg-info/
 lib/
 lib64/
 parts/
 sdist/
+pip-wheel-metadata/
+build/
 wheels/
 share/python-wheels/
 *.egg-info/
@@ -22,6 +25,12 @@ share/python-wheels/
 venv/
 ENV/
 env/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
 
 # Testing
 .coverage
@@ -39,6 +48,35 @@ coverage.xml
 *.swo
 *~
 
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Pytest
+.pytest_cache/
+.tox/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pip artifacts (from failed installs)
+=*
+=0.*
+=1.*
+=2.*
+=3.*
+=4.*
+=5.*
+=6.*
+=7.*
+=8.*
+=9.*
+
 # OS
 .DS_Store
 Thumbs.db
@@ -49,4 +87,5 @@ config.toml
 *.db
 *.db-shm
 *.db-wal
-__pycache__/
+config.yaml
+.sekha/
