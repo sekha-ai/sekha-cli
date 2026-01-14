@@ -1,3 +1,9 @@
+[![CI Status](https://github.com/sekha-ai/sekha-cli/workflows/CI/badge.svg)](https://github.com/sekha-ai/sekha-cli/actions)
+[![codecov](https://codecov.io/gh/sekha-ai/sekha-cli/branch/main/graph/badge.svg)](https://codecov.io/gh/sekha-ai/sekha-cli)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org)
+[![PyPI](https://img.shields.io/pypi/v/sekha-cli.svg)](https://pypi.org/project/sekha-cli/)
+
 # Sekha CLI
 
 Command-line interface for the Sekha AI Memory Controller - store, search, and manage AI conversation memories from your terminal.
