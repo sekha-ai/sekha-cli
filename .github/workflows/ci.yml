@@ -94,12 +94,12 @@ jobs:
           pytest tests/ -v --cov=sekha_cli --cov-report=xml --cov-report=term-missing
 
       - name: Check coverage threshold
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: |
           coverage report --fail-under=80
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
