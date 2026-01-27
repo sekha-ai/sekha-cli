@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: "3.11"
+  PYTHON_VERSION: "3.14"
 
 jobs:
   lint:
@@ -56,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout code
@@ -94,12 +94,12 @@ jobs:
           pytest tests/ -v --cov=sekha_cli --cov-report=xml --cov-report=term-missing
 
       - name: Check coverage threshold
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         run: |
           coverage report --fail-under=80
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml

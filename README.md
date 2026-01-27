@@ -3,7 +3,7 @@
 > **Terminal Memory Management for Sekha**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org)
 [![Status](https://img.shields.io/badge/status-beta-orange.svg)]()
 
 ---
