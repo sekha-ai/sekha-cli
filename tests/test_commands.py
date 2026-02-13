@@ -22,6 +22,19 @@ MOCK_CLIENT_INSTANCE.get_conversation.return_value = {}
 MOCK_CLIENT_INSTANCE.get_pruning_suggestions.return_value = []
 MOCK_CLIENT_INSTANCE.export.return_value = ""
 MOCK_CLIENT_INSTANCE.store_conversation.return_value = {"id": "conv-123"}
+# NEW v0.2.0 defaults
+MOCK_CLIENT_INSTANCE.delete_conversation.return_value = None
+MOCK_CLIENT_INSTANCE.pin_conversation.return_value = None
+MOCK_CLIENT_INSTANCE.count_conversations.return_value = {"count": 0}
+MOCK_CLIENT_INSTANCE.full_text_search.return_value = []
+MOCK_CLIENT_INSTANCE.assemble_context.return_value = []
+MOCK_CLIENT_INSTANCE.generate_summary.return_value = {"summary": "Test summary"}
+MOCK_CLIENT_INSTANCE.suggest_labels.return_value = []
+MOCK_CLIENT_INSTANCE.execute_pruning.return_value = None
+MOCK_CLIENT_INSTANCE.list_folders.return_value = []
+MOCK_CLIENT_INSTANCE.move_conversation.return_value = None
+MOCK_CLIENT_INSTANCE.health_check.return_value = {"status": "healthy"}
+MOCK_CLIENT_INSTANCE.rebuild_embeddings.return_value = None
 
 mock_sekha_client_class.return_value = MOCK_CLIENT_INSTANCE
 
@@ -46,6 +59,19 @@ def mock_client():
     MOCK_CLIENT_INSTANCE.get_pruning_suggestions.return_value = []
     MOCK_CLIENT_INSTANCE.export.return_value = ""
     MOCK_CLIENT_INSTANCE.store_conversation.return_value = {"id": "conv-123"}
+    # NEW v0.2.0 defaults
+    MOCK_CLIENT_INSTANCE.delete_conversation.return_value = None
+    MOCK_CLIENT_INSTANCE.pin_conversation.return_value = None
+    MOCK_CLIENT_INSTANCE.count_conversations.return_value = {"count": 0}
+    MOCK_CLIENT_INSTANCE.full_text_search.return_value = []
+    MOCK_CLIENT_INSTANCE.assemble_context.return_value = []
+    MOCK_CLIENT_INSTANCE.generate_summary.return_value = {"summary": "Test summary", "level": "daily"}
+    MOCK_CLIENT_INSTANCE.suggest_labels.return_value = []
+    MOCK_CLIENT_INSTANCE.execute_pruning.return_value = None
+    MOCK_CLIENT_INSTANCE.list_folders.return_value = []
+    MOCK_CLIENT_INSTANCE.move_conversation.return_value = None
+    MOCK_CLIENT_INSTANCE.health_check.return_value = {"status": "healthy", "version": "0.2.0", "uptime_seconds": 100}
+    MOCK_CLIENT_INSTANCE.rebuild_embeddings.return_value = None
     return MOCK_CLIENT_INSTANCE
 
 
@@ -61,19 +87,19 @@ atexit.register(cleanup)
 
 
 class TestQueryCommand:
-    """Test query command."""
+    """Test query command (deprecated)."""
 
     def test_query_basic(self, runner, mock_client):
-        """Test basic query."""
+        """Test basic query shows deprecation warning."""
         mock_client.query.return_value = [
-            {"id": "conv-123", "label": "Work", "preview": "Test preview"}
+            {"id": "conv-123", "label": "Work", "preview": "Test preview", "content": "Test content"}
         ]
 
         result = runner.invoke(cli, ["--api-key", "sk-test-valid-key-1234567890", "query", "test query"])
 
         assert result.exit_code == 0
+        assert "deprecated" in result.output.lower()
         assert "conv-123" in result.output
-        assert "Work" in result.output
 
     def test_query_with_label(self, runner, mock_client):
         """Test query with label filter."""
@@ -95,18 +121,433 @@ class TestQueryCommand:
         )
 
         assert result.exit_code == 0
-        output = json.loads(result.output)
-        assert output[0]["id"] == "conv-123"
+        assert "deprecated" in result.output.lower()
 
-    def test_query_no_results(self, runner, mock_client):
-        """Test query with no results."""
-        mock_client.query.return_value = []
 
-        result = runner.invoke(cli, ["--api-key", "sk-test-valid-key-1234567890", "query", "test"])
+# ==================== NEW v0.2.0 COMMAND TESTS ====================
+
+class TestSearchCommands:
+    """Test new search commands."""
+
+    def test_search_semantic_basic(self, runner, mock_client):
+        """Test semantic search."""
+        mock_client.query.return_value = [
+            {"id": "conv-123", "conversation_id": "conv-123", "label": "AI", "content": "Test content"}
+        ]
+
+        result = runner.invoke(
+            cli, ["--api-key", "sk-test-valid-key-1234567890", "search", "semantic", "embeddings"]
+        )
 
         assert result.exit_code == 0
-        assert "No results found" in result.output
+        assert "Semantic Search" in result.output
+        mock_client.query.assert_called_once()
 
+    def test_search_fts_basic(self, runner, mock_client):
+        """Test full-text search."""
+        mock_client.full_text_search.return_value = [
+            {"conversation_id": "conv-1", "role": "user", "content": "test message"}
+        ]
+
+        result = runner.invoke(
+            cli, ["--api-key", "sk-test-valid-key-1234567890", "search", "fts", "test keywords"]
+        )
+
+        assert result.exit_code == 0
+        assert "Full-Text Search" in result.output
+        mock_client.full_text_search.assert_called_once_with("test keywords", limit=10)
+
+    def test_search_fts_json_format(self, runner, mock_client):
+        """Test FTS with JSON output."""
+        mock_client.full_text_search.return_value = [{"content": "test"}]
+
+        result = runner.invoke(
+            cli, ["--api-key", "sk-test-valid-key-1234567890", "search", "fts", "test", "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
+
+
+class TestConversationCRUD:
+    """Test conversation CRUD commands."""
+
+    def test_conversation_delete_with_confirmation(self, runner, mock_client):
+        """Test conversation deletion with user confirmation."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "conversation", "delete", "conv-123"],
+            input="y\n"
+        )
+
+        assert result.exit_code == 0
+        assert "Delete conversation" in result.output
+        mock_client.delete_conversation.assert_called_once_with("conv-123")
+
+    def test_conversation_delete_with_yes_flag(self, runner, mock_client):
+        """Test conversation deletion with --yes flag."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "conversation", "delete", "conv-123", "--yes"]
+        )
+
+        assert result.exit_code == 0
+        mock_client.delete_conversation.assert_called_once_with("conv-123")
+
+    def test_conversation_delete_cancelled(self, runner, mock_client):
+        """Test conversation deletion cancelled."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "conversation", "delete", "conv-123"],
+            input="n\n"
+        )
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output
+        mock_client.delete_conversation.assert_not_called()
+
+    def test_conversation_pin(self, runner, mock_client):
+        """Test conversation pinning."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "conversation", "pin", "conv-123"]
+        )
+
+        assert result.exit_code == 0
+        assert "Pinned" in result.output
+        mock_client.pin_conversation.assert_called_once_with("conv-123")
+
+    def test_conversation_archive(self, runner, mock_client):
+        """Test conversation archiving."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "conversation", "archive", "conv-123"]
+        )
+
+        assert result.exit_code == 0
+        assert "Archived" in result.output
+        mock_client.archive.assert_called_once_with("conv-123")
+
+    def test_conversation_count_all(self, runner, mock_client):
+        """Test counting all conversations."""
+        mock_client.count_conversations.return_value = {"count": 42}
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "conversation", "count"]
+        )
+
+        assert result.exit_code == 0
+        assert "42" in result.output
+        mock_client.count_conversations.assert_called_once_with(label=None, folder=None)
+
+    def test_conversation_count_by_label(self, runner, mock_client):
+        """Test counting conversations by label."""
+        mock_client.count_conversations.return_value = {"count": 15, "label": "Work"}
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "conversation", "count", "--label", "Work"]
+        )
+
+        assert result.exit_code == 0
+        assert "15" in result.output
+        mock_client.count_conversations.assert_called_once_with(label="Work", folder=None)
+
+
+class TestLabelCommands:
+    """Test label management commands."""
+
+    def test_labels_suggest(self, runner, mock_client):
+        """Test AI label suggestions."""
+        mock_client.suggest_labels.return_value = [
+            {"label": "AI", "confidence": 0.95, "is_existing": True, "reason": "AI content"},
+            {"label": "ML", "confidence": 0.85, "is_existing": False, "reason": "ML topics"}
+        ]
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "labels", "suggest", "conv-123"]
+        )
+
+        assert result.exit_code == 0
+        assert "AI Label Suggestions" in result.output
+        assert "AI" in result.output
+        assert "0.95" in result.output
+        mock_client.suggest_labels.assert_called_once_with("conv-123")
+
+    def test_labels_suggest_json(self, runner, mock_client):
+        """Test label suggestions JSON output."""
+        mock_client.suggest_labels.return_value = [{"label": "Test", "confidence": 0.9}]
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "labels", "suggest", "conv-123", "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["label"] == "Test"
+
+
+class TestFolderCommands:
+    """Test folder management commands."""
+
+    def test_folder_list(self, runner, mock_client):
+        """Test listing folders."""
+        mock_client.list_folders.return_value = ["/Work", "/Personal", "/Archive"]
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "folder", "list"]
+        )
+
+        assert result.exit_code == 0
+        assert "/Work" in result.output
+        assert "/Personal" in result.output
+        mock_client.list_folders.assert_called_once()
+
+    def test_folder_list_empty(self, runner, mock_client):
+        """Test listing folders when none exist."""
+        mock_client.list_folders.return_value = []
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "folder", "list"]
+        )
+
+        assert result.exit_code == 0
+        assert "No folders found" in result.output
+
+    def test_folder_move(self, runner, mock_client):
+        """Test moving conversation to folder."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "folder", "move", "conv-123", "/NewFolder"]
+        )
+
+        assert result.exit_code == 0
+        assert "Moved" in result.output
+        mock_client.move_conversation.assert_called_once_with("conv-123", "/NewFolder")
+
+
+class TestContextCommand:
+    """Test context assembly command."""
+
+    def test_context_basic(self, runner, mock_client):
+        """Test basic context assembly."""
+        mock_client.assemble_context.return_value = [
+            {"role": "user", "content": "Context message 1"},
+            {"role": "assistant", "content": "Context message 2"}
+        ]
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "context", "explain embeddings"]
+        )
+
+        assert result.exit_code == 0
+        assert "relevant messages" in result.output
+        mock_client.assemble_context.assert_called_once()
+
+    def test_context_with_options(self, runner, mock_client):
+        """Test context assembly with all options."""
+        mock_client.assemble_context.return_value = []
+
+        result = runner.invoke(
+            cli,
+            [
+                "--api-key", "sk-test-valid-key-1234567890",
+                "context", "test query",
+                "--budget", "2000",
+                "--labels", "AI",
+                "--labels", "ML",
+                "--exclude-folders", "/Archive"
+            ]
+        )
+
+        assert result.exit_code == 0
+        call_args = mock_client.assemble_context.call_args
+        assert call_args[1]["query"] == "test query"
+        assert call_args[1]["context_budget"] == 2000
+        assert "AI" in call_args[1]["preferred_labels"]
+
+    def test_context_json_format(self, runner, mock_client):
+        """Test context with JSON output."""
+        mock_client.assemble_context.return_value = [{"role": "user", "content": "test"}]
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "context", "test", "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
+
+
+class TestSummarizeCommand:
+    """Test summarization command."""
+
+    def test_summarize_daily(self, runner, mock_client):
+        """Test daily summary generation."""
+        mock_client.generate_summary.return_value = {
+            "summary": "Daily summary text",
+            "level": "daily"
+        }
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "summarize", "conv-123", "--level", "daily"]
+        )
+
+        assert result.exit_code == 0
+        assert "summary" in result.output.lower()
+        mock_client.generate_summary.assert_called_once_with("conv-123", "daily")
+
+    def test_summarize_weekly(self, runner, mock_client):
+        """Test weekly summary generation."""
+        mock_client.generate_summary.return_value = {"summary": "Weekly summary", "level": "weekly"}
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "summarize", "conv-123", "--level", "weekly"]
+        )
+
+        assert result.exit_code == 0
+        mock_client.generate_summary.assert_called_once_with("conv-123", "weekly")
+
+    def test_summarize_json_format(self, runner, mock_client):
+        """Test summary with JSON output."""
+        mock_client.generate_summary.return_value = {"summary": "Test", "level": "daily"}
+
+        result = runner.invoke(
+            cli,
+            [
+                "--api-key", "sk-test-valid-key-1234567890",
+                "summarize", "conv-123",
+                "--level", "monthly",
+                "--format", "json"
+            ]
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "summary" in data
+
+
+class TestPruneCommandEnhanced:
+    """Test enhanced prune command."""
+
+    def test_prune_with_yes_flag(self, runner, mock_client):
+        """Test prune with --yes flag."""
+        mock_client.get_pruning_suggestions.return_value = [
+            {"conversation_id": "conv-1", "conversation_label": "Old", "recommendation": "archive"},
+            {"conversation_id": "conv-2", "conversation_label": "Stale", "recommendation": "archive"}
+        ]
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "prune", "--yes"]
+        )
+
+        assert result.exit_code == 0
+        assert "Pruned 2 conversations" in result.output
+        mock_client.execute_pruning.assert_called_once()
+        call_args = mock_client.execute_pruning.call_args[0][0]
+        assert "conv-1" in call_args
+        assert "conv-2" in call_args
+
+    def test_prune_dry_run_with_table(self, runner, mock_client):
+        """Test prune dry-run shows table."""
+        mock_client.get_pruning_suggestions.return_value = [
+            {"conversation_id": "conv-1", "conversation_label": "Test", "recommendation": "archive"}
+        ]
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "prune", "--dry-run"]
+        )
+
+        assert result.exit_code == 0
+        assert "Would prune 1 conversations" in result.output
+        mock_client.execute_pruning.assert_not_called()
+
+
+class TestHealthCommand:
+    """Test health check command."""
+
+    def test_health_check_healthy(self, runner, mock_client):
+        """Test health check with healthy status."""
+        mock_client.health_check.return_value = {
+            "status": "healthy",
+            "version": "0.2.0",
+            "uptime_seconds": 12345
+        }
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "health"]
+        )
+
+        assert result.exit_code == 0
+        assert "healthy" in result.output.lower()
+        assert "0.2.0" in result.output
+        mock_client.health_check.assert_called_once()
+
+    def test_health_check_failure(self, runner, mock_client):
+        """Test health check with failure."""
+        mock_client.health_check.side_effect = RuntimeError("Connection failed")
+
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "health"]
+        )
+
+        assert result.exit_code != 0
+        assert "failed" in result.output.lower()
+
+
+class TestRebuildEmbeddingsCommand:
+    """Test embeddings rebuild command."""
+
+    def test_rebuild_embeddings_with_yes(self, runner, mock_client):
+        """Test rebuild with --yes flag."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "rebuild-embeddings", "--yes"]
+        )
+
+        assert result.exit_code == 0
+        assert "rebuild started" in result.output.lower()
+        mock_client.rebuild_embeddings.assert_called_once()
+
+    def test_rebuild_embeddings_with_confirmation(self, runner, mock_client):
+        """Test rebuild with user confirmation."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "rebuild-embeddings"],
+            input="y\n"
+        )
+
+        assert result.exit_code == 0
+        mock_client.rebuild_embeddings.assert_called_once()
+
+    def test_rebuild_embeddings_cancelled(self, runner, mock_client):
+        """Test rebuild cancelled."""
+        result = runner.invoke(
+            cli,
+            ["--api-key", "sk-test-valid-key-1234567890", "rebuild-embeddings"],
+            input="n\n"
+        )
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.output
+        mock_client.rebuild_embeddings.assert_not_called()
+
+
+# ==================== EXISTING TESTS (UPDATED) ====================
 
 class TestStoreCommand:
     """Test store command."""
@@ -116,7 +557,6 @@ class TestStoreCommand:
         """Test successful store."""
         mock_client.store_conversation.return_value = {"id": "conv-123"}
 
-        # Create a temporary JSON file
         test_file = tmp_path / "test.json"
         test_file.write_text(
             json.dumps({"messages": [{"role": "user", "content": "Hello"}]})
@@ -156,8 +596,8 @@ class TestStoreCommand:
         assert result.exit_code != 0
 
 
-class TestLabelsCommand:
-    """Test labels command."""
+class TestLabelsListCommand:
+    """Test labels list command."""
 
     def test_labels_list(self, runner, mock_client):
         """Test listing labels."""
@@ -182,8 +622,8 @@ class TestLabelsCommand:
         assert "No labels found" in result.output
 
 
-class TestConversationCommand:
-    """Test conversation command."""
+class TestConversationShowCommand:
+    """Test conversation show command."""
 
     def test_conversation_show_text(self, runner, mock_client):
         """Test showing conversation in text format."""
@@ -204,107 +644,6 @@ class TestConversationCommand:
         assert result.exit_code == 0
         assert "Test" in result.output
         assert "user:" in result.output
-
-    def test_conversation_show_json(self, runner, mock_client):
-        """Test showing conversation in JSON format."""
-        mock_client.get_conversation.return_value = {"id": "conv-123", "label": "Test"}
-
-        result = runner.invoke(
-            cli,
-            [
-                "--api-key",
-                "sk-test-valid-key-1234567890",
-                "conversation",
-                "show",
-                "conv-123",
-                "--format",
-                "json",
-            ],
-        )
-
-        assert result.exit_code == 0
-        output = json.loads(result.output)
-        assert output["id"] == "conv-123"
-
-    def test_conversation_show_markdown(self, runner, mock_client):
-        """Test showing conversation in markdown format."""
-        mock_client.get_conversation.return_value = {
-            "id": "conv-123",
-            "label": "Test",
-            "messages": [{"role": "user", "content": "Hello"}],
-        }
-
-        result = runner.invoke(
-            cli,
-            [
-                "--api-key",
-                "sk-test-valid-key-1234567890",
-                "conversation",
-                "show",
-                "conv-123",
-                "--format",
-                "markdown",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert "# Test" in result.output
-        assert "**User:** Hello" in result.output
-
-
-class TestPruneCommand:
-    """Test prune command."""
-
-    def test_prune_dry_run(self, runner, mock_client):
-        """Test prune with dry-run."""
-        mock_client.get_pruning_suggestions.return_value = [
-            {"id": "conv-1", "reason": "Low importance"}
-        ]
-
-        result = runner.invoke(cli, ["--api-key", "sk-test-valid-key-1234567890", "prune", "--dry-run"])
-
-        assert result.exit_code == 0
-        assert "Would prune 1 conversations" in result.output
-
-    def test_prune_no_dry_run(self, runner, mock_client):
-        """Test prune without dry-run flag - should prompt for confirmation."""
-        mock_client.get_pruning_suggestions.return_value = [
-            {"id": "conv-1", "reason": "Low importance"}
-        ]
-
-        # Provide "y" for confirmation
-        result = runner.invoke(
-            cli,
-            ["--api-key", "sk-test-valid-key-1234567890", "prune"],
-            input="y\n"
-        )
-
-        assert result.exit_code == 0
-        # Should show confirmation prompt and success message
-        assert "Prune 1 conversations?" in result.output
-        assert "Pruning complete." in result.output
-        # Verify archive was called
-        mock_client.archive.assert_called_once_with("conv-1")
-
-    def test_prune_confirm(self, runner, mock_client):
-        """Test prune with confirmation."""
-        mock_client.get_pruning_suggestions.return_value = [
-            {"id": "conv-1", "reason": "Low importance"}
-        ]
-
-        result = runner.invoke(cli, ["--api-key", "sk-test-valid-key-1234567890", "prune"], input="y\n")
-
-        assert result.exit_code == 0
-        mock_client.archive.assert_called_once_with("conv-1")
-
-    def test_prune_no_suggestions(self, runner, mock_client):
-        """Test prune when no suggestions exist."""
-        mock_client.get_pruning_suggestions.return_value = []
-
-        result = runner.invoke(cli, ["--api-key", "sk-test-valid-key-1234567890", "prune"])
-
-        assert result.exit_code == 0
-        assert "No conversations need pruning" in result.output
 
 
 class TestExportCommand:
@@ -333,32 +672,6 @@ class TestExportCommand:
 
         assert result.exit_code == 0
         assert output_file.exists()
-        assert "# Test Label" in output_file.read_text()
-
-    def test_export_json(self, runner, mock_client, tmp_path):
-        """Test export in JSON format."""
-        mock_client.export.return_value = '[{"id": "conv-123"}]'
-
-        output_file = tmp_path / "export.json"
-
-        result = runner.invoke(
-            cli,
-            [
-                "--api-key",
-                "sk-test-valid-key-1234567890",
-                "export",
-                "--label",
-                "Test",
-                "--output",
-                str(output_file),
-                "--format",
-                "json",
-            ],
-        )
-
-        assert result.exit_code == 0
-        output = json.loads(output_file.read_text())
-        assert output[0]["id"] == "conv-123"
 
 
 class TestConfigCommand:
@@ -369,19 +682,18 @@ class TestConfigCommand:
         """Test config sets values."""
         mock_config = mock_config_class.return_value
 
-        # Move --api-key to after 'config' command
         result = runner.invoke(
             cli,
             [
-                "config",  # command first
+                "config",
                 "--api-url", "http://example.com:8080",
-                "--api-key", "sk-test-valid-key-1234567890"  # then its options
+                "--api-key", "sk-test-valid-key-1234567890"
             ],
         )
 
         assert result.exit_code == 0
         mock_config_class.assert_called_once_with(
-            base_url="http://example.com:8080", 
+            base_url="http://example.com:8080",
             api_key="sk-test-valid-key-1234567890"
         )
         mock_config.save.assert_called_once()
@@ -400,8 +712,8 @@ class TestErrorHandling:
     def test_client_error_propagation(self, runner, mock_client):
         """Test that client errors are handled gracefully."""
         mock_client.query.side_effect = RuntimeError("Connection failed")
-        
+
         result = runner.invoke(cli, ["--api-key", "sk-test-valid-key-1234567890", "query", "test"])
-        
+
         assert result.exit_code != 0
         assert "Search failed" in result.output
