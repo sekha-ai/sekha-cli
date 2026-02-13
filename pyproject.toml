@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sekha-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Command-line interface for Sekha AI Memory Controller"
 readme = "README.md"
 license = {text = "AGPL-3.0"}
@@ -16,7 +16,8 @@ dependencies = [
     "sekha @ file:///${PROJECT_ROOT}/../sekha-python-sdk",
     "click>=8.0.0",
     "rich>=13.0.0",
-    "pyyaml>=6.0"
+    "pyyaml>=6.0",
+    "requests>=2.31.0"
 ]
 
 [project.optional-dependencies]
@@ -26,7 +27,8 @@ dev = [
     "pytest-mock>=3.10.0",
     "black>=24.0",
     "ruff>=0.1.0",
-    "mypy>=1.5"
+    "mypy>=1.5",
+    "responses>=0.25.0"  # For mocking HTTP requests in tests
 ]
 
 [project.scripts]
